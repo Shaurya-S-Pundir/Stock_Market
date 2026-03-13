@@ -2,7 +2,7 @@ import pandas as pd
 from pathlib import Path
 import numpy as np
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score
 
 # -----------------------------
@@ -58,8 +58,15 @@ X_test_scaled = scaler.transform(X_test)
 # -----------------------------
 # MODEL
 # -----------------------------
-model = LogisticRegression(max_iter=1000, class_weight="balanced")
+model = RandomForestClassifier(
+    n_estimators=300,
+    max_depth=10,
+    min_samples_split=20,
+    random_state=42,
+    n_jobs=-1
+)
 model.fit(X_train_scaled, y_train)
+
 
 # -----------------------------
 # EVALUATION
@@ -95,7 +102,7 @@ test_data["signal"] = np.where(
 # -----------------------------
 # SAVE SIGNALS FOR BACKTEST
 # -----------------------------
-out_path = REPORTS_DIR / "lr_signals.csv"
+out_path = REPORTS_DIR / "rf_signals.csv"
 test_data.to_csv(out_path, index=False)
 
 print(f"\nSignals saved to: {out_path}")

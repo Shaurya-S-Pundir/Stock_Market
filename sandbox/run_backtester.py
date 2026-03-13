@@ -1,0 +1,12 @@
+import sys
+from pathlib import Path
+
+# Add project root to Python path
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT))
+
+from src.backtest.backtester import backtest_from_signals
+
+signals_path = ROOT / "reports" / "lr_signals.csv"
+
+backtest_from_signals(signals_path)
