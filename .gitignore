@@ -4,3 +4,8 @@ __pycache__/
 requirement.txt
 requirements.txt
 database.db 
+.venv
+.DS_Store
+data/processed
+__pycache__
+.ipynb_checkpoints
