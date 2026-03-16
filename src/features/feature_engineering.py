@@ -57,6 +57,12 @@ def add_ml_features(file_path):
 
     df["returns_lag_3"] = df["returns"].shift(3)
 
+        # Create target variable
+    df["target"] = (df["Close"].shift(-1) > df["Close"]).astype(int)
+
+    # Last row has no tomorrow value
+    df.dropna(inplace=True)
+
     # -------------------------
     # DROP NA rows from shifting
     # -------------------------
