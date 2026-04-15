@@ -80,11 +80,11 @@ print(classification_report(y_test, y_pred))
 # FEATURE IMPORTANCE
 # -----------------------------
 importance = pd.Series(
-    model.coef_[0],
+    model.feature_importances_,
     index=X_train.columns
-).sort_values(key=abs, ascending=False)
+).sort_values(ascending=False)
 
-print("\nTop 15 Important Features:")
+print("\nTop 15 Important Features (RF):")
 print(importance.head(15))
 
 # -----------------------------

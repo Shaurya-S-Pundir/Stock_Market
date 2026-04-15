@@ -7,6 +7,6 @@ sys.path.append(str(ROOT))
 
 from src.backtest.backtester import backtest_from_signals
 
-signals_path = ROOT / "reports" / "lr_signals.csv"
+signals_path = ROOT / "reports" / "rf_signals.csv"
 
 backtest_from_signals(signals_path)
