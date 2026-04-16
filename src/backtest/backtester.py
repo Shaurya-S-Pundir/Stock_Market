@@ -1,36 +1,52 @@
 import pandas as pd
+import numpy as np
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]
+REPORTS_DIR = ROOT / "reports" / "signals"
 
-def backtest_from_signals(signals_csv):
-    df = pd.read_csv(signals_csv, parse_dates=["Date"])
+def backtest(file):
 
-    results = []
+    df = pd.read_csv(file)
 
-    for stock in df["stock"].unique():
-        stock_df = df[df["stock"] == stock].sort_values("Date").copy()
+    df["position"] = df["position"]
+    df["position"] = df["position"].shift(1).fillna(0)
 
-        stock_df["position"] = stock_df["signal"].map({"BUY": 1, "SELL": -1})
+    # shift to avoid lookahead
+    df["position"] = df["position"].shift(1).fillna(0)
 
-        # FIX 1 — ensure no NaN positions
-        stock_df["position"] = stock_df["position"].fillna(0)
+    df["strategy_ret"] = df["position"] * df["ret_1"]
 
-        # Daily returns
-        stock_df["market_return"] = stock_df["Close"].pct_change()
+    df["trade"] = df["position"].diff().abs().fillna(0)
+    df["strategy_ret"] -= df["trade"] * 0.0005
 
-        # Strategy return
-        stock_df["strategy_return"] = stock_df["position"].shift(1) * stock_df["market_return"]
+    df["equity"] = (1 + df["strategy_ret"]).cumprod()
 
-        # FIX 2 — remove NaN PnL rows correctly
-        stock_df["strategy_return"] = stock_df["strategy_return"].fillna(0)
+    final_equity = df["equity"].iloc[-1]
+    sharpe = np.sqrt(252) * df["strategy_ret"].mean() / (df["strategy_ret"].std() + 1e-9)
 
-        # Equity
-        stock_df["equity_curve"] = (1 + stock_df["strategy_return"]).cumprod()
+    print(f"\n{file.stem}")
+    print("Equity:", final_equity)
+    print("Sharpe:", sharpe)
 
-        final_equity = stock_df["equity_curve"].iloc[-1]
+    out = file.with_name(file.stem + "_backtest.csv")
+    df.to_csv(out, index=False)
 
-        print(f"{stock} Final Equity: {final_equity:.3f}")
-        results.append(final_equity)
-        #print(stock, stock_df["position"].value_counts())
+def random_baseline(df):
+    df = df.copy()
 
-    print("\nAverage Equity Across Stocks:", sum(results) / len(results))
+    df["position"] = np.random.choice([0, 1], size=len(df))
+
+    df["position"] = df["position"].shift(1).fillna(0)
+
+    df["strategy_ret"] = df["position"] * df["ret_1"]
+
+    equity = (1 + df["strategy_ret"]).cumprod().iloc[-1]
+
+    sharpe = np.sqrt(252) * df["strategy_ret"].mean() / (df["strategy_ret"].std() + 1e-9)
+
+    return equity, sharpe
+
+if __name__ == "__main__":
+    for f in REPORTS_DIR.glob("*signals.csv"):
+        backtest(f)

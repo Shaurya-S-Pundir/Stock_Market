@@ -7,3 +7,5 @@ database.db
 data/processed
 __pycache__
 .ipynb_checkpoints
+data/
+experiment-service/

@@ -53,8 +53,8 @@ def add_ml_features(file_path):
     # TARGET
     # -------------------------
 
-    df["target"] = (df["Close"].shift(-1) > df["Close"]).astype(int)
-
+    df["ret_1"] = df["Close"].pct_change().shift(-1)
+    df["target"] = df["ret_1"].astype(float)
     # -------------------------
     # HARD CLEAN (REAL FIX)
     # -------------------------
