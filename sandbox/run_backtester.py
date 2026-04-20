@@ -1,65 +1,42 @@
 import sys
 from pathlib import Path
-import pandas as pd
+from datetime import datetime
 
-
-# -----------------------
-# PROJECT ROOT SETUP
-# -----------------------
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
-from src.backtest.backtester import backtest, random_baseline
+from src.backtest.backtester import run_backtester
 
 # -----------------------
-# SIGNALS DIRECTORY
+# BACKTEST PIPELINE ONLY
 # -----------------------
-REPORTS_DIR = ROOT / "reports" / "signals"
+def run_backtester_pipeline(run_id=None):
 
-# Safety check
-if not REPORTS_DIR.exists():
-    raise FileNotFoundError(f"Signals directory not found: {REPORTS_DIR}")
+    if run_id is None:
+        run_id = datetime.now().strftime("%Y%m%d_%H%M")
 
-# -----------------------
-# OPTIONAL: FILTER PATTERN
-# -----------------------
-FILE_PATTERN = "*_signals.csv"
+    # -------------------------
+    # CORE BACKTEST EXECUTION
+    # -------------------------
+    result = run_backtester(run_id=run_id)
 
-# -----------------------
-# RUN BACKTESTS
-# -----------------------
-def run_all_backtests():
-    files = sorted(REPORTS_DIR.glob(FILE_PATTERN))
-
-    if not files:
-        raise FileNotFoundError(f"No signal files found in {REPORTS_DIR}")
-
-    print(f"\nFound {len(files)} signal files")
-    print("Starting backtests...\n")
-
-    results = []
-
-    for f in files:
-        try:
-            print(f"Running backtest: {f.name}")
-            result = backtest(f)   # we will upgrade this later to return metrics
-            results.append((f.name, result))
-            real = backtest(f)
-            random_eq, random_sharpe = random_baseline(pd.read_csv(f))
-
-            print("\n--- EDGE TEST ---")
-            print("Real Sharpe:", real)
-            print("Random Sharpe:", random_sharpe)
-        except Exception as e:
-            print(f"[ERROR] Failed on {f.name}: {e}")
-
-    print("\nAll backtests completed.")
-    return results
-    
+    # -------------------------
+    # RETURN ONLY RESULTS
+    # -------------------------
+    return {
+        "run_id": run_id,
+        "summary": result.get("summary", [])
+    }
 
 
 # -----------------------
-# MAIN
+# ENTRYPOINT (FOR N8N)
 # -----------------------
 if __name__ == "__main__":
-    run_all_backtests()
+    output = run_backtester_pipeline()
+
+    print("\nPIPELINE COMPLETE")
+    print(f"Run ID: {output['run_id']}")
+    print(f"Rows: {len(output['rows'])}")
+    print(f"Models: {len(output['model_summary'])}")
+    print(f"Baselines: {len(output['baseline_summary'])}")
