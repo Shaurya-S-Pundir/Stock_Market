@@ -6,10 +6,6 @@ from datetime import datetime
 ROOT = Path(__file__).resolve().parents[2]
 REPORTS_DIR = ROOT / "reports" / "signals"
 
-
-# -----------------------------
-# MODEL MAP
-# -----------------------------
 MODEL_MAP = {
     "logistic_regression": "Logistic Regression",
     "random_forest": "Random Forest",
@@ -17,107 +13,131 @@ MODEL_MAP = {
 }
 
 
-# -----------------------------
-# METRICS
-# -----------------------------
 def compute_metrics(df):
-    equity = df["equity"].iloc[-1]
+    equity = df["equity"].iloc[-1] if len(df) else 1.0
 
-    sharpe = np.sqrt(252) * df["strategy_ret"].mean() / (df["strategy_ret"].std() + 1e-9)
+    ret = df["strategy_ret"].replace([np.inf, -np.inf], 0).fillna(0)
+
+    sharpe = (
+        np.sqrt(252) * ret.mean() / (ret.std() + 1e-9)
+        if ret.std() != 0 else 0.0
+    )
 
     roll_max = df["equity"].cummax()
-    drawdown = (df["equity"] - roll_max) / roll_max
-    max_drawdown = drawdown.min()
+    drawdown = (df["equity"] - roll_max) / (roll_max + 1e-9)
+    max_drawdown = drawdown.min() if len(df) else 0.0
 
-    win_rate = float((df["strategy_ret"] > 0).mean())
-    total_trades = int(df["trade"].sum())
+    win_rate = float((ret > 0).mean()) if len(ret) else 0.0
+    total_trades = int(df["trade"].sum()) if "trade" in df else 0
 
     return equity, sharpe, max_drawdown, win_rate, total_trades
 
 
-# -----------------------------
-# BACKTEST CORE
-# -----------------------------
 def backtest(file_path, run_id, model_name):
-
     df = pd.read_csv(file_path).copy()
+
+    # -------------------------
+    # CLEAN CORE DATA
+    # -------------------------
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+
+    # ensure required columns exist
+    required_cols = ["position", "ret_1"]
+    for c in required_cols:
+        if c not in df.columns:
+            raise ValueError(f"{c} missing in {file_path}")
 
     stock = file_path.stem.replace("_signals", "")
     model_name = MODEL_MAP.get(model_name, model_name)
 
-    if "ret_1" not in df.columns:
-        raise ValueError(f"Missing ret_1 in {file_path}")
+    # -------------------------
+    # SORT SAFETY (VERY IMPORTANT)
+    # -------------------------
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date").reset_index(drop=True)
 
     # -------------------------
-    # SIGNAL PROCESSING
+    # SHIFT POSITION (NO LOOKAHEAD)
     # -------------------------
     df["position"] = df["position"].shift(1).fillna(0)
 
+    # -------------------------
+    # STRATEGY RETURNS
+    # -------------------------
     df["strategy_ret"] = df["position"] * df["ret_1"]
 
+    # transaction cost
     df["trade"] = df["position"].diff().abs().fillna(0)
     df["strategy_ret"] -= df["trade"] * 0.0005
 
-    df["equity"] = (1 + df["strategy_ret"]).cumprod()
+    # clean returns again
+    df["strategy_ret"] = df["strategy_ret"].replace([np.inf, -np.inf], 0).fillna(0)
 
+    # -------------------------
+    # EQUITY CURVE
+    # -------------------------
+    if len(df) == 0:
+        df["equity"] = 1.0
+    else:
+        df["equity"] = (1 + df["strategy_ret"]).cumprod()
+
+    df["equity"] = df["equity"].replace([np.inf, -np.inf], np.nan)
+
+    if df["equity"].isna().any():
+        df["equity"] = df["equity"].fillna(1.0)
     # -------------------------
     # METRICS
     # -------------------------
     final_equity, sharpe, max_dd, win_rate, trades = compute_metrics(df)
 
     # -------------------------
-    # DATE HANDLING
+    # DATE FIELD SAFE HANDLING
     # -------------------------
-    raw = pd.read_csv(file_path)
-
-    if "date" in raw.columns:
-        df["date"] = pd.to_datetime(raw["date"])
+    if "Date" in df.columns:
+        df["date"] = df["Date"]
     else:
         df["date"] = pd.NaT
 
     # -------------------------
-    # ADD METADATA
+    # METADATA
     # -------------------------
     df["run_id"] = run_id
     df["stock"] = stock
     df["model"] = model_name
 
     # -------------------------
-    # SIGNAL OUTPUT (ROW LEVEL)
+    # SIGNAL OUTPUT
     # -------------------------
-    signals = df[
-        [
-            "run_id",
-            "stock",
-            "model",
-            "date",
-            "position",
-            "ret_1",
-            "strategy_ret",
-            "equity",
-        ]
-    ].rename(columns={"ret_1": "returns"}).to_dict(orient="records")
+    signals = df[[
+        "run_id",
+        "stock",
+        "model",
+        "date",
+        "position",
+        "ret_1",
+        "strategy_ret",
+        "equity"
+    ]].rename(columns={"ret_1": "returns"}).to_dict(orient="records")
 
     # -------------------------
-    # SUMMARY OUTPUT
+    # SUMMARY OUTPUT (SAFE JSON)
     # -------------------------
     summary = {
         "run_id": run_id,
         "stock": stock,
         "model": model_name,
-        "final_equity": float(final_equity),
-        "sharpe": float(sharpe),
-        "max_drawdown": float(max_dd),
-        "win_rate": float(win_rate),
-        "total_trades": int(trades),
+        "final_equity": float(final_equity) if np.isfinite(final_equity) else 1.0,
+        "sharpe": float(sharpe) if np.isfinite(sharpe) else 0.0,
+        "max_drawdown": float(max_dd) if np.isfinite(max_dd) else 0.0,
+        "win_rate": float(win_rate) if np.isfinite(win_rate) else 0.0,
+        "total_trades": int(trades)
     }
 
     return {
         "signals": signals,
-        "summary": [summary],
+        "summary": [summary]
     }
-
-
 # -----------------------------
 # RUNNER (MULTI MODEL + STOCK)
 # -----------------------------

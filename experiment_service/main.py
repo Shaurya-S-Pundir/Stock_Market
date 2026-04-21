@@ -16,7 +16,7 @@ app = FastAPI(title="Stock Market ML Experiment Service")
 # -----------------------
 def experiment_pipeline(mode: str = "train"):
 
-    training_reports = train_and_generate_signals("rf")
+    training_reports = train_and_generate_signals()
 
     if mode == "train":
         return {
